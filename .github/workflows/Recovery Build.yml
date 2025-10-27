@@ -104,19 +104,28 @@ jobs:
         chmod a+x ~/bin/repo
         sudo ln -sf ~/bin/repo /usr/bin/repo
 
+    - name: Create Workspace & Cache Source
+      id: repo-cache
+      uses: actions/cache@v4
+      with:
+        path: workspace/.repo
+        key: repo-${{ runner.os }}-${{ github.event.inputs.MANIFEST_BRANCH }}
+
     - name: Initialize repo
       run: |
-        mkdir workspace
+        mkdir -p workspace
         cd workspace
         echo "workspace-folder=$(pwd)" >> $GITHUB_OUTPUT
         git config --global user.name "Nico170420"
         git config --global user.email "b170420nc@gmail.com"
-        repo init --depth=1 -u ${{ github.event.inputs.MANIFEST_URL }} -b ${{ github.event.inputs.MANIFEST_BRANCH }}
+        if [[ "${{ steps.repo-cache.outputs.cache-hit }}" != "true" ]]; then
+          repo init --depth=1 -u ${{ github.event.inputs.MANIFEST_URL }} -b ${{ github.event.inputs.MANIFEST_BRANCH }}
+        fi
       id: pwd
 
     - name: Repo Sync
       run: |
-        repo sync -j$(nproc --all) --force-sync
+        repo sync -j$(nproc --all) --force-sync -c --no-clone-bundle --no-tags --optimized-fetch --prune
       working-directory: workspace
 
     - name: Clone device tree
@@ -151,6 +160,12 @@ jobs:
       uses: pierotofy/set-swap-space@master
       with:
         swap-size-gb: 12
+
+    - name: Set up ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: ccache-${{ github.job }}-${{ runner.os }}-${{ github.event.inputs.MANIFEST_BRANCH }}-${{ github.event.inputs.MAKEFILE_NAME }}
+        max-size: 10G
 
     - name: Building recovery
       run: |
