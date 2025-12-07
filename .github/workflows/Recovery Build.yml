@@ -6,7 +6,7 @@ on:
       MANIFEST_URL:
         description: 'MANIFEST_URL (if want to use SSH keys, use git@github.com:XXXXX)'
         required: true
-        default: 'https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp'
+        default: 'https://github.com/serein-213/platform_manifest_twrp_aosp'
       MANIFEST_BRANCH:
         description: 'MANIFEST_BRANCH'
         required: true
@@ -14,7 +14,7 @@ on:
       DEVICE_TREE_URL:
         description: 'DEVICE_TREE_URL'
         required: true
-        default: 'https://github.com/TeamWin/android_device_asus_I003D'
+        default: 'https://github.com/serein-213/action_build_twrp_device_tree'
       DEVICE_TREE_BRANCH:
         description: 'DEVICE_TREE_BRANCH'
         required: true
@@ -22,7 +22,7 @@ on:
       DEVICE_PATH:
         description: 'DEVICE_PATH'
         required: true
-        default: 'device/qualcomm/qssi'
+        default: 'device/oppo/PCGM00'
       COMMON_TREE_URL:
         description: 'COMMON_TREE_URL (if no common tree, leave blank)'
         required: false
@@ -32,11 +32,11 @@ on:
       DEVICE_NAME:
         description: 'DEVICE_NAME'
         required: true
-        default: 'qssi'
+        default: 'PCGM00'
       MAKEFILE_NAME:
         description: 'MAKEFILE_NAME'
         required: true
-        default: 'twrp_qssi'
+        default: 'twrp_PCGM00'
       BUILD_TARGET:
         description: 'BUILD_TARGET'
         required: true
@@ -104,9 +104,19 @@ jobs:
         chmod a+x ~/bin/repo
         sudo ln -sf ~/bin/repo /usr/bin/repo
 
+    - name: Cache Repo
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/bin/repo
+          workspace/.repo
+        key: repo-${{ github.event.inputs.MANIFEST_URL }}-${{ github.event.inputs.MANIFEST_BRANCH }}
+        restore-keys: |
+          repo-${{ github.event.inputs.MANIFEST_URL }}-${{ github.event.inputs.MANIFEST_BRANCH }}
+
     - name: Initialize repo
       run: |
-        mkdir workspace
+        mkdir -p workspace
         cd workspace
         echo "workspace-folder=$(pwd)" >> $GITHUB_OUTPUT
         git config --global user.name "Nico170420"
@@ -116,7 +126,7 @@ jobs:
 
     - name: Repo Sync
       run: |
-        repo sync -j$(nproc --all) --force-sync
+        repo sync -j$(nproc --all) --force-sync -c --no-clone-bundle --no-tags --optimized-fetch --prune
       working-directory: workspace
 
     - name: Clone device tree
@@ -152,6 +162,20 @@ jobs:
       with:
         swap-size-gb: 12
 
+    - name: Set up ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        # 使用更稳定的 key：同一分支的所有设备共享缓存，提高命中率
+        # 移除设备特定的 MAKEFILE_NAME，让同一 Android 版本的构建共享缓存
+        key: ccache-${{ github.job }}-${{ runner.os }}-${{ github.event.inputs.MANIFEST_BRANCH }}
+        restore-keys: |
+          ccache-${{ github.job }}-${{ runner.os }}-${{ github.event.inputs.MANIFEST_BRANCH }}
+          ccache-${{ github.job }}-${{ runner.os }}-
+        # 减少缓存大小到 5G，避免超出 GitHub 10GB 总限制
+        # 这样可以保留更多缓存条目，减少被自动清理的风险
+        max-size: 10G
+        append-timestamp: false
+
     - name: Building recovery
       run: |
         source build/envsetup.sh
@@ -164,6 +188,7 @@ jobs:
       with:
         files: | 
           workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/${{ github.event.inputs.BUILD_TARGET }}.img
+          workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/vbmeta.img
           workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/*.zip
           workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/*vendor*.img
         name: ${{ github.event.inputs.DEVICE_NAME }}-${{ github.run_id }}
