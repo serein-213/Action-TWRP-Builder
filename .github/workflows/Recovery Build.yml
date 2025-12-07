@@ -104,6 +104,16 @@ jobs:
         chmod a+x ~/bin/repo
         sudo ln -sf ~/bin/repo /usr/bin/repo
 
+    - name: Cache Repo
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/bin/repo
+          workspace/.repo
+        key: repo-${{ github.event.inputs.MANIFEST_URL }}-${{ github.event.inputs.MANIFEST_BRANCH }}
+        restore-keys: |
+          repo-${{ github.event.inputs.MANIFEST_URL }}-${{ github.event.inputs.MANIFEST_BRANCH }}
+
     - name: Initialize repo
       run: |
         mkdir -p workspace
@@ -156,6 +166,9 @@ jobs:
       uses: hendrikmuhs/ccache-action@v1.2
       with:
         key: ccache-${{ github.job }}-${{ runner.os }}-${{ github.event.inputs.MANIFEST_BRANCH }}-${{ github.event.inputs.MAKEFILE_NAME }}
+        restore-keys: |
+          ccache-${{ github.job }}-${{ runner.os }}-${{ github.event.inputs.MANIFEST_BRANCH }}-
+          ccache-${{ github.job }}-${{ runner.os }}-
         max-size: 10G
 
     - name: Building recovery
